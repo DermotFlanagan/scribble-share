@@ -1,103 +1,155 @@
+"use client";
+import React, { useEffect, useRef } from "react";
+import { coiny } from "./ui/fonts";
 import Image from "next/image";
+import gsap from "gsap";
+import Link from "next/link";
+import { getUserSession } from "./services/user.service";
+import { useRouter } from "next/navigation";
+import { supabase } from "./lib/initSupabase";
+import HeroSection from "./components/landing/HeroSection";
 
-export default function Home() {
+function Page() {
+  const cloudRef = useRef<HTMLDivElement>(null);
+  const superStickRef = useRef<HTMLDivElement>(null);
+  const sunRef = useRef<HTMLDivElement>(null);
+
+  const router = useRouter();
+
+  useEffect(
+    function () {
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((event, session) => {
+        if (event == "SIGNED_IN" && session?.user) {
+          router.push("/dashboard");
+        }
+      });
+
+      getUserSession().then((session) => {
+        if (session?.user) {
+          router.push("/dashboard");
+        }
+      });
+
+      return () => subscription.unsubscribe();
+    },
+    [router]
+  );
+
+  useEffect(function () {
+    gsap.to(cloudRef.current, {
+      y: -20,
+      repeat: -1,
+      yoyo: true,
+      duration: 1.2,
+      ease: "power1.inOut",
+    });
+
+    gsap.to(sunRef.current, {
+      y: -10,
+      repeat: -1,
+      yoyo: true,
+      duration: 1.5,
+      ease: "power1.inOut",
+    });
+
+    if (superStickRef.current) {
+      const tl = gsap.timeline({
+        repeat: -1,
+        defaults: { ease: "power1.inOut" },
+      });
+
+      tl.to(superStickRef.current, {
+        x: -1600,
+        duration: 4,
+      })
+        .to(superStickRef.current, {
+          scaleX: -1,
+          duration: 0.8,
+        })
+        .to(superStickRef.current, {
+          x: 0,
+          scaleX: -1,
+          duration: 3,
+        })
+        .to(superStickRef.current, {
+          scaleX: 1,
+          duration: 0.5,
+        });
+    }
+  }, []);
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <div className="min-h-screen relative overflow-hidden">
+      <div className="absolute inset-0 z-0">
+        <div className="absolute top-12 left-260 z-[-1]" ref={sunRef}>
+          <Image
+            src="/imgs/sun.png"
+            width={200}
+            height={200}
+            alt="sun scribble"
+          />
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
+
+        <div ref={superStickRef} className="absolute top-20 right-10">
           <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+            src="/imgs/super-stick.png"
+            width={200}
+            height={200}
+            alt="superhero scribble"
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
+        </div>
+
+        <div ref={cloudRef} className="absolute top-25 left-270">
           <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
+            src="/imgs/cloud.png"
+            width={200}
+            height={200}
+            alt="cloud scribble"
           />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
+        </div>
+
+        <div className="absolute top-80 left-120">
           <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
+            src="/imgs/arrow.svg"
+            alt="arrow scribble"
+            width={400}
+            height={400}
           />
-          Go to nextjs.org →
-        </a>
-      </footer>
+        </div>
+
+        {/* <div ref={planeRef} className="absolute top-0 right-0">
+          <Image
+            src="/imgs/paper-plane.png"
+            width={200}
+            height={200}
+            alt="paper plane scribble"
+          />
+        </div> */}
+      </div>
+
+      <HeroSection
+        text="ScribbleShare"
+        subText="A free and collaborative online note-making app"
+      />
+
+      <div className="flex flex-col md:flex-row gap-8 items-center justify-center mt-10">
+        <Link
+          href={"/login"}
+          className={`${coiny.className} px-4 py-2 bg-blue-500 z-10 text-white rounded-xl text-xl cursor-pointer border-b-6 border-r-6 border-blue-600 hover:bg-blue-400 transition hover:scale-120 md:shadow-custom`}
+        >
+          Log in
+        </Link>
+        <Link
+          href={"/signup"}
+          className={`${coiny.className} px-4 py-2 bg-cyan-500 z-10 text-white rounded-xl text-xl cursor-pointer border-b-6 border-r-6 border-cyan-600 hover:bg-cyan-400 transition hover:scale-120 md:shadow-custom`}
+        >
+          Sign up
+        </Link>
+      </div>
     </div>
   );
 }
+
+export default Page;
