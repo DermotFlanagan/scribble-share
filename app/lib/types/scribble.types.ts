@@ -1,3 +1,5 @@
+import { RoomType } from "./room.types";
+
 export interface Point {
   x: number;
   y: number;
@@ -20,4 +22,5 @@ export interface ScribblingPen {
 export type ScribbleMenuProps = {
   scribblingPen: ScribblingPen;
   setScribblingPen: React.Dispatch<React.SetStateAction<ScribblingPen>>;
+  room: RoomType;
 };

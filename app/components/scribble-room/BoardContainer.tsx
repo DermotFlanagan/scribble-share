@@ -16,6 +16,7 @@ export default function BoardContainer(props: BoardContainerProps) {
       <ScribbleMenu
         scribblingPen={scribblingPen}
         setScribblingPen={setScribblingPen}
+        room={room}
       />
       <WhiteBoard
         scribblingPen={scribblingPen}

@@ -9,6 +9,7 @@ import { getUserSession } from "../services/user.service";
 export default function LoginPage() {
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
+  const [confirmPassword, setConfirmPassword] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const router = useRouter();
@@ -28,6 +29,15 @@ export default function LoginPage() {
     e.preventDefault();
 
     setIsLoading(true);
+
+    if (password !== confirmPassword) {
+      toast.error("Passwords do not match.", {
+        position: "top-center",
+        duration: 1500,
+      });
+      setIsLoading(false);
+      return;
+    }
 
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -83,6 +93,15 @@ export default function LoginPage() {
         className="border-2 border-dashed border-gray-400 outline-none w-full px-3 py-2 rounded-lg bg-white mt-3 max-w-sm mx-auto"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
+        required
+      />
+
+      <input
+        type="password"
+        placeholder="Confirm password"
+        className="border-2 border-dashed border-gray-400 outline-none w-full px-3 py-2 rounded-lg bg-white mt-3 max-w-sm mx-auto"
+        value={confirmPassword}
+        onChange={(e) => setConfirmPassword(e.target.value)}
         required
       />
 

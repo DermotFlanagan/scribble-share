@@ -1,14 +1,11 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { RealtimeChannel } from "@supabase/supabase-js";
 import {
-  clearRoomStrokes,
   loadRoomStrokes,
   saveStroke,
 } from "@/app/services/scribbling-room.service";
 import { supabase } from "@/app/lib/initSupabase";
 import { fetchUserById, getUserSession } from "@/app/services/user.service";
-import { Trash } from "lucide-react";
-import toast from "react-hot-toast";
 import clsx from "clsx";
 import { vividly } from "@/app/ui/fonts";
 import { ScribbleStroke } from "@/app/lib/types/scribble.types";
@@ -45,9 +42,6 @@ export default function WhiteBoard(props: BoardProps) {
     currStroke: null,
     isScribbling: false,
   });
-
-  const ownerId = room?.owner;
-  const isRoomOwner = session?.user?.id === ownerId;
 
   const boardAreaRef = useRef<HTMLDivElement>(null);
   const createdCursorsRef = useRef<string[]>([]);
@@ -556,27 +550,6 @@ export default function WhiteBoard(props: BoardProps) {
     });
   }
 
-  function clearCanvas(roomId: string) {
-    if (confirm("Are you sure you want to erase the scribble?")) {
-      setCanvasState({
-        strokes: [],
-        currStroke: null,
-        isScribbling: false,
-      });
-
-      if (channel) {
-        channel.send({
-          type: "broadcast",
-          event: "canvas_clear",
-          payload: { roomId },
-        });
-      }
-
-      clearRoomStrokes(roomId);
-      toast.success("Scribble wiped!");
-    }
-  }
-
   return (
     <div
       className={clsx(
@@ -597,17 +570,6 @@ export default function WhiteBoard(props: BoardProps) {
             </h1>
           </div>
         </div>
-
-        {isRoomOwner && (
-          <div className="absolute bottom-2 right-2 z-50">
-            <button
-              className="p-2 bg-red-500 hover:bg-red-700 text-white rounded-full shadow-lg "
-              onClick={() => clearCanvas(room.id)}
-            >
-              <Trash className="w-5 h-5" />
-            </button>
-          </div>
-        )}
 
         <div id="container" className="w-full h-full">
           <canvas

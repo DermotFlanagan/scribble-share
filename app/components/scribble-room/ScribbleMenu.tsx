@@ -7,7 +7,12 @@ import {
   Palette,
   Pen,
   SlidersHorizontal,
+  Trash,
 } from "lucide-react";
+import { clearRoomStrokes } from "@/app/services/scribbling-room.service";
+import toast from "react-hot-toast";
+import { Session } from "@supabase/supabase-js";
+import { getUserSession } from "@/app/services/user.service";
 
 const COLOUR_PALETTE = [
   "#ff0000",
@@ -52,7 +57,8 @@ const colourMap: Record<string, string> = {
 };
 
 export default function ScribbleMenu(props: ScribbleMenuProps) {
-  const { scribblingPen, setScribblingPen } = props;
+  const [session, setSession] = useState<Session | null>(null);
+  const { scribblingPen, setScribblingPen, room } = props;
   const [isEraserActive, setIsEraserActive] = useState<boolean>(false);
   const [isPenActive, setIsPenActive] = useState<boolean>(true);
   const [previousColour, setPreviousColour] = useState("");
@@ -63,6 +69,15 @@ export default function ScribbleMenu(props: ScribbleMenuProps) {
   // const [chatInput, setChatInput] = useState<string>("");
   const [showThicknessSlider, setShowThicknessSlider] =
     useState<boolean>(false);
+
+  const ownerId = room?.owner;
+  const isRoomOwner = session?.user?.id === ownerId;
+
+  useEffect(() => {
+    getUserSession().then((session) => {
+      setSession(session);
+    });
+  }, []);
 
   useEffect(
     function () {
@@ -113,27 +128,41 @@ export default function ScribbleMenu(props: ScribbleMenuProps) {
     setIsPenActive(true);
   }
 
-  return (
-    <div className="fixed bottom-4 left-4 z-20 flex flex-row items-center gap-2">
-      <div className="relative">
-        <button
-          onMouseEnter={() => setShowPalette(true)}
-          onClick={() => setShowPalette((prev) => !prev)}
-          className={`h-10 w-10 rounded-full text-white shadow-md flex items-center justify-center hover:bg-gray-200 transition
-            ${colourMap[scribblingPen.colour] || "text-black"}`}
-        >
-          <Palette
-            className={`w-5 h-5 "text-black"
-            `}
-          />
-        </button>
+  async function clearCanvas(roomId: string) {
+    if (confirm("Are you sure you want to erase the scribble?")) {
+      try {
+        await clearRoomStrokes(roomId);
+        toast.success("Scribble wiped!");
+      } catch {
+        toast.error("Failed to clear scribble.");
+      }
+    } else {
+      return;
+    }
+  }
 
-        {showPalette && (
-          <div
-            onMouseLeave={() => setShowPalette(false)}
-            className="absolute bottom-14 left-0 bg-white rounded-lg p-2 flex flex-col grow shrink gap-2 shadow-md"
+  return (
+    <div className="fixed bottom-4 left-0 right-0 px-4 z-20 flex flex-row justify-between items-center gap-2">
+      <div className="flex flex-row items-center gap-2">
+        <div className="relative">
+          <button
+            onMouseEnter={() => setShowPalette(true)}
+            onClick={() => setShowPalette((prev) => !prev)}
+            className={`h-10 w-10 rounded-full text-white shadow-md flex items-center justify-center hover:bg-gray-200 transition
+            ${colourMap[scribblingPen.colour] || "text-black"}`}
           >
-            {/* <label
+            <Palette
+              className={`w-5 h-5 "text-black"
+            `}
+            />
+          </button>
+
+          {showPalette && (
+            <div
+              onMouseLeave={() => setShowPalette(false)}
+              className="absolute bottom-14 left-0 bg-white rounded-lg p-2 flex flex-col grow shrink gap-2 shadow-md"
+            >
+              {/* <label
               key={"colour-input"}
               className="h-6 w-6 rounded-sm border relative overflow-hidden cursor-pointer"
               style={{
@@ -151,82 +180,93 @@ export default function ScribbleMenu(props: ScribbleMenuProps) {
                 className="w-full h-full cursor-pointer absolute inset-0 opacity-0"
               />
             </label> */}
-            {COLOUR_PALETTE.map((colour) => (
-              <div
-                key={colour}
-                className="h-6 w-6 rounded-sm border cursor-pointer transition hover:scale-90 duration-100"
-                style={{ backgroundColor: colour }}
-                onClick={() => {
-                  handleColourSelect(colour);
-                  setShowPalette(false);
-                }}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      <button
-        onClick={handlePenClick}
-        className={`cursor-pointer h-10 w-10 rounded-full shadow-md flex items-center justify-center transition hover:bg-gray-200 ${
-          isPenActive ? "bg-gray-300" : "bg-white"
-        }`}
-      >
-        <Pen className="w-5 h-5 text-black" />
-      </button>
-
-      <button
-        onClick={() => setShowThicknessSlider((prev) => !prev)}
-        className={`cursor-pointer h-10 w-10 rounded-full md:hidden shadow-md flex items-center justify-center transition hover:bg-gray-200 ${
-          showThicknessSlider ? "bg-gray-300" : "bg-white"
-        }`}
-      >
-        <SlidersHorizontal className="w-5 h-5 text-black" />
-      </button>
-
-      {showThicknessSlider && (
-        <div className="absolute bottom-14 left-0 bg-white rounded-lg p-2 flex flex-col grow shrink gap-2 shadow-md">
-          {
-            <input
-              id="scribble-size"
-              type="range"
-              min={0}
-              max={50}
-              step={5}
-              value={scribblingPen.size}
-              onChange={(e) =>
-                setScribblingPen((prev: ScribblingPen) => ({
-                  ...prev,
-                  size: parseInt(e.target.value),
-                }))
-              }
-              className="w-full"
-            />
-          }
+              {COLOUR_PALETTE.map((colour) => (
+                <div
+                  key={colour}
+                  className="h-6 w-6 rounded-sm border cursor-pointer transition hover:scale-90 duration-100"
+                  style={{ backgroundColor: colour }}
+                  onClick={() => {
+                    handleColourSelect(colour);
+                    setShowPalette(false);
+                  }}
+                />
+              ))}
+            </div>
+          )}
         </div>
-      )}
 
-      <button
-        onClick={toggleEraser}
-        className={`cursor-pointer h-10 w-10 rounded-full shadow-md flex items-center justify-center transition hover:bg-gray-200 ${
-          isEraserActive ? "bg-gray-300" : "bg-white"
-        }`}
-      >
-        <Eraser className="w-5 h-5 text-black" />
-      </button>
-
-      <div className="relative">
         <button
-          onClick={() => setShowChat((prev) => !prev)}
-          className="h-10 w-10 rounded-full bg-white shadow-md flex items-center justify-center hover:bg-gray-200 transition"
+          onClick={handlePenClick}
+          className={`cursor-pointer h-10 w-10 rounded-full shadow-md flex items-center justify-center transition hover:bg-gray-200 ${
+            isPenActive ? "bg-gray-300" : "bg-white"
+          }`}
         >
-          <MessageSquare className="w-5 h-5 text-black" />
+          <Pen className="w-5 h-5 text-black" />
         </button>
 
-        {showChat && (
-          <div className="absolute bottom-14 left-0 bg-white rounded-lg p-2 flex flex-col grow shrink gap-2 shadow-md"></div>
+        <button
+          onClick={() => setShowThicknessSlider((prev) => !prev)}
+          className={`cursor-pointer h-10 w-10 rounded-full md:hidden shadow-md flex items-center justify-center transition hover:bg-gray-200 ${
+            showThicknessSlider ? "bg-gray-300" : "bg-white"
+          }`}
+        >
+          <SlidersHorizontal className="w-5 h-5 text-black" />
+        </button>
+
+        {showThicknessSlider && (
+          <div className="absolute bottom-14 left-0 bg-white rounded-lg p-2 flex flex-col grow shrink gap-2 shadow-md">
+            {
+              <input
+                id="scribble-size"
+                type="range"
+                min={0}
+                max={50}
+                step={5}
+                value={scribblingPen.size}
+                onChange={(e) =>
+                  setScribblingPen((prev: ScribblingPen) => ({
+                    ...prev,
+                    size: parseInt(e.target.value),
+                  }))
+                }
+                className="w-full"
+                onMouseUp={() => setShowThicknessSlider(false)}
+                onTouchEnd={() => setShowThicknessSlider(false)}
+              />
+            }
+          </div>
         )}
+
+        <button
+          onClick={toggleEraser}
+          className={`cursor-pointer h-10 w-10 rounded-full shadow-md flex items-center justify-center transition hover:bg-gray-200 ${
+            isEraserActive ? "bg-gray-300" : "bg-white"
+          }`}
+        >
+          <Eraser className="w-5 h-5 text-black" />
+        </button>
+
+        <div className="relative">
+          <button
+            onClick={() => setShowChat((prev) => !prev)}
+            className="h-10 w-10 rounded-full bg-white shadow-md flex items-center justify-center hover:bg-gray-200 transition"
+          >
+            <MessageSquare className="w-5 h-5 text-black" />
+          </button>
+
+          {showChat && (
+            <div className="absolute bottom-14 left-0 bg-white rounded-lg p-2 flex flex-col grow shrink gap-2 shadow-md"></div>
+          )}
+        </div>
       </div>
+      {isRoomOwner && (
+        <button
+          className="h-10 w-10 rounded-full bg-red-500 shadow-md flex items-center justify-center hover:bg-red-700 transition"
+          onClick={() => clearCanvas(room.id)}
+        >
+          <Trash className="w-5 h-5 text-white" />
+        </button>
+      )}
     </div>
   );
 }
