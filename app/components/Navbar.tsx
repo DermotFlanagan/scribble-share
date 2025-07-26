@@ -133,7 +133,7 @@ function Navbar(props: Props) {
         <div className="flex items-center gap-2">
           {session && (
             <>
-              <h3 className="text-white-500 font-bold">
+              <h3 className="text-white-500 font-bold hidden md:block">
                 {session?.user?.user_metadata?.userName}
               </h3>
             </>
