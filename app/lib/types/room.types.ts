@@ -1,4 +1,5 @@
-import { ScribblingPen } from "./scribble.types";
+import { RealtimeChannel, Session } from "@supabase/supabase-js";
+import { Point, ScribblingPen } from "./scribble.types";
 import { ScribbleStroke } from "./scribble.types";
 
 export interface BoardContainerProps {
@@ -8,11 +9,22 @@ export interface BoardContainerProps {
 }
 
 export interface BoardProps {
-  room: RoomType;
   scribblingPen: ScribblingPen;
-  setScribblingPen: React.Dispatch<React.SetStateAction<ScribblingPen>>;
-  onScribblersCountChange?: (count: string[]) => void;
+  setScribblingPen: (
+    pen: ScribblingPen | ((prev: ScribblingPen) => ScribblingPen)
+  ) => void;
+  room: RoomType;
+  onScribblersCountChange?: (users: string[]) => void;
   hideTools?: boolean;
+  session: Session | null;
+  isAuthenticated: boolean;
+  channel: RealtimeChannel | null;
+  canvasState: CanvasState;
+  setCanvasState: React.Dispatch<React.SetStateAction<CanvasState>>;
+  broadcastStrokeStart: (stroke: ScribbleStroke) => void;
+  broadcastStrokeUpdate: (strokeId: string, points: Point[]) => void;
+  broadcastStrokeEnd: (strokeId: string) => void;
+  sendMousePosition: (userId: string, x: number, y: number) => void;
 }
 
 export interface CanvasState {

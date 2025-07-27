@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { ScribblingPen } from "@/app/lib/types/scribble.types";
-import { ScribbleMenuProps } from "@/app/lib/types/scribble.types";
 import {
   Eraser,
   MessageSquare,
@@ -9,10 +8,7 @@ import {
   SlidersHorizontal,
   Trash,
 } from "lucide-react";
-import { clearRoomStrokes } from "@/app/services/scribbling-room.service";
-import toast from "react-hot-toast";
-import { Session } from "@supabase/supabase-js";
-import { getUserSession } from "@/app/services/user.service";
+import { RoomType } from "@/app/lib/types/room.types";
 
 const COLOUR_PALETTE = [
   "#ff0000",
@@ -56,35 +52,32 @@ const colourMap: Record<string, string> = {
   "#808080": "bg-gray-500",
 };
 
+interface ScribbleMenuProps {
+  scribblingPen: ScribblingPen;
+  setScribblingPen: (
+    pen: ScribblingPen | ((prev: ScribblingPen) => ScribblingPen)
+  ) => void;
+  room: RoomType;
+  isRoomOwner: boolean;
+  onClearCanvas: (roomId: string) => Promise<void>;
+}
+
 export default function ScribbleMenu(props: ScribbleMenuProps) {
-  const [session, setSession] = useState<Session | null>(null);
-  const { scribblingPen, setScribblingPen, room } = props;
+  const { scribblingPen, setScribblingPen, room, isRoomOwner, onClearCanvas } =
+    props;
+
   const [isEraserActive, setIsEraserActive] = useState<boolean>(false);
   const [isPenActive, setIsPenActive] = useState<boolean>(true);
   const [previousColour, setPreviousColour] = useState("");
   const [showPalette, setShowPalette] = useState<boolean>(false);
   const [showChat, setShowChat] = useState<boolean>(false);
   const [isCustomColour, setIsCustomColour] = useState<boolean>(false);
-  // const [chatMessages, setChatMessages] = useState<string[]>([]);
-  // const [chatInput, setChatInput] = useState<string>("");
   const [showThicknessSlider, setShowThicknessSlider] =
     useState<boolean>(false);
 
-  const ownerId = room?.owner;
-  const isRoomOwner = session?.user?.id === ownerId;
-
   useEffect(() => {
-    getUserSession().then((session) => {
-      setSession(session);
-    });
-  }, []);
-
-  useEffect(
-    function () {
-      setIsCustomColour(!COLOUR_PALETTE.includes(scribblingPen.colour));
-    },
-    [scribblingPen.colour]
-  );
+    setIsCustomColour(!COLOUR_PALETTE.includes(scribblingPen.colour));
+  }, [scribblingPen.colour]);
 
   const toggleEraser = () => {
     if (!isEraserActive) {
@@ -128,18 +121,9 @@ export default function ScribbleMenu(props: ScribbleMenuProps) {
     setIsPenActive(true);
   }
 
-  async function clearCanvas(roomId: string) {
-    if (confirm("Are you sure you want to erase the scribble?")) {
-      try {
-        await clearRoomStrokes(roomId);
-        toast.success("Scribble wiped!");
-      } catch {
-        toast.error("Failed to clear scribble.");
-      }
-    } else {
-      return;
-    }
-  }
+  const handleClearCanvas = () => {
+    onClearCanvas(room.id);
+  };
 
   return (
     <div className="fixed bottom-4 left-0 right-0 px-4 z-20 flex flex-row justify-between items-center gap-2">
@@ -151,10 +135,7 @@ export default function ScribbleMenu(props: ScribbleMenuProps) {
             className={`h-10 w-10 rounded-full text-white shadow-md flex items-center justify-center hover:bg-gray-200 transition
             ${colourMap[scribblingPen.colour] || "text-black"}`}
           >
-            <Palette
-              className={`w-5 h-5 "text-black"
-            `}
-            />
+            <Palette className="w-5 h-5 text-black" />
           </button>
 
           {showPalette && (
@@ -162,24 +143,6 @@ export default function ScribbleMenu(props: ScribbleMenuProps) {
               onMouseLeave={() => setShowPalette(false)}
               className="absolute bottom-14 left-0 bg-white rounded-lg p-2 flex flex-col grow shrink gap-2 shadow-md"
             >
-              {/* <label
-              key={"colour-input"}
-              className="h-6 w-6 rounded-sm border relative overflow-hidden cursor-pointer"
-              style={{
-                background:
-                  "linear-gradient(90deg,rgba(255, 0, 0, 1) 0%, rgba(255, 162, 0, 1) 11%, rgba(238, 255, 0, 1) 22%, rgba(0, 255, 25, 1) 33%, rgba(0, 255, 94, 1) 43%, rgba(0, 255, 247, 1) 55%, rgba(30, 0, 255, 1) 66%, rgba(191, 0, 255, 1) 77%, rgba(255, 0, 204, 1) 88%, rgba(252, 70, 107, 1) 100%)",
-              }}
-            >
-              <input
-                type="color"
-                value={scribblingPen.colour}
-                onChange={(e) => {
-                  console.log("Color input changed to:", e.target.value);
-                  handleColourSelect(e.target.value);
-                }}
-                className="w-full h-full cursor-pointer absolute inset-0 opacity-0"
-              />
-            </label> */}
               {COLOUR_PALETTE.map((colour) => (
                 <div
                   key={colour}
@@ -215,25 +178,23 @@ export default function ScribbleMenu(props: ScribbleMenuProps) {
 
         {showThicknessSlider && (
           <div className="absolute bottom-14 left-0 bg-white rounded-lg p-2 flex flex-col grow shrink gap-2 shadow-md">
-            {
-              <input
-                id="scribble-size"
-                type="range"
-                min={0}
-                max={50}
-                step={5}
-                value={scribblingPen.size}
-                onChange={(e) =>
-                  setScribblingPen((prev: ScribblingPen) => ({
-                    ...prev,
-                    size: parseInt(e.target.value),
-                  }))
-                }
-                className="w-full"
-                onMouseUp={() => setShowThicknessSlider(false)}
-                onTouchEnd={() => setShowThicknessSlider(false)}
-              />
-            }
+            <input
+              id="scribble-size"
+              type="range"
+              min={0}
+              max={50}
+              step={5}
+              value={scribblingPen.size}
+              onChange={(e) =>
+                setScribblingPen((prev: ScribblingPen) => ({
+                  ...prev,
+                  size: parseInt(e.target.value),
+                }))
+              }
+              className="w-full"
+              onMouseUp={() => setShowThicknessSlider(false)}
+              onTouchEnd={() => setShowThicknessSlider(false)}
+            />
           </div>
         )}
 
@@ -259,10 +220,11 @@ export default function ScribbleMenu(props: ScribbleMenuProps) {
           )}
         </div>
       </div>
+
       {isRoomOwner && (
         <button
           className="h-10 w-10 rounded-full bg-red-500 shadow-md flex items-center justify-center hover:bg-red-700 transition"
-          onClick={() => clearCanvas(room.id)}
+          onClick={handleClearCanvas}
         >
           <Trash className="w-5 h-5 text-white" />
         </button>

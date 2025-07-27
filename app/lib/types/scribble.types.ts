@@ -19,8 +19,12 @@ export interface ScribblingPen {
   size: number;
 }
 
-export type ScribbleMenuProps = {
+export interface ScribbleMenuProps {
   scribblingPen: ScribblingPen;
-  setScribblingPen: React.Dispatch<React.SetStateAction<ScribblingPen>>;
+  setScribblingPen: (
+    pen: ScribblingPen | ((prev: ScribblingPen) => ScribblingPen)
+  ) => void;
   room: RoomType;
-};
+  isRoomOwner: boolean;
+  onClearCanvas: (roomId: string) => Promise<void>;
+}

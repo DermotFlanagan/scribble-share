@@ -1,18 +1,13 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
-import { RealtimeChannel } from "@supabase/supabase-js";
+import React, { useEffect, useRef, useCallback } from "react";
 import {
   loadRoomStrokes,
   saveStroke,
 } from "@/app/services/scribbling-room.service";
-import { supabase } from "@/app/lib/initSupabase";
-import { fetchUserById, getUserSession } from "@/app/services/user.service";
+import { fetchUserById } from "@/app/services/user.service";
 import clsx from "clsx";
 import { vividly } from "@/app/ui/fonts";
 import { ScribbleStroke } from "@/app/lib/types/scribble.types";
-import { Point } from "@/app/lib/types/scribble.types";
 import { BoardProps } from "@/app/lib/types/room.types";
-import { CanvasState } from "@/app/lib/types/room.types";
-import { Session } from "@supabase/supabase-js";
 
 interface CursorPayload {
   userId: string;
@@ -25,23 +20,17 @@ export default function WhiteBoard(props: BoardProps) {
     room,
     scribblingPen,
     setScribblingPen,
-    onScribblersCountChange,
     hideTools,
+    session,
+    isAuthenticated,
+    channel,
+    canvasState,
+    setCanvasState,
+    broadcastStrokeStart,
+    broadcastStrokeUpdate,
+    broadcastStrokeEnd,
+    sendMousePosition,
   } = props;
-
-  const MOUSE_EVENT = "cursor";
-  const STROKE_START_EVENT = "stroke_start";
-  const STROKE_END_EVENT = "stroke_end";
-  const STROKE_UPDATE_EVENT = "stroke_update";
-
-  const [session, setSession] = useState<Session>();
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [channel, setChannel] = useState<RealtimeChannel | null>(null);
-  const [canvasState, setCanvasState] = useState<CanvasState>({
-    strokes: [],
-    currStroke: null,
-    isScribbling: false,
-  });
 
   const boardAreaRef = useRef<HTMLDivElement>(null);
   const createdCursorsRef = useRef<string[]>([]);
@@ -115,85 +104,8 @@ export default function WhiteBoard(props: BoardProps) {
     }
   }, []);
 
-  const sendMousePosition = (
-    channel: RealtimeChannel,
-    userId: string,
-    x: number,
-    y: number
-  ) => {
-    return channel.send({
-      type: "broadcast",
-      event: MOUSE_EVENT,
-      payload: { userId, x, y },
-    });
-  };
-
-  function broadcastStrokeStart(
-    channel: RealtimeChannel,
-    stroke: ScribbleStroke
-  ) {
-    channel.send({
-      type: "broadcast",
-      event: STROKE_START_EVENT,
-      payload: stroke,
-    });
-  }
-
-  function broadcastStrokeUpdate(
-    channel: RealtimeChannel,
-    strokeId: string,
-    newPoints: Point[]
-  ) {
-    channel.send({
-      type: "broadcast",
-      event: STROKE_UPDATE_EVENT,
-      payload: { strokeId, points: newPoints },
-    });
-  }
-
-  function broadcastStrokeEnd(channel: RealtimeChannel, strokeId: string) {
-    channel.send({
-      type: "broadcast",
-      event: STROKE_END_EVENT,
-      payload: { strokeId },
-    });
-  }
-
-  const handleIncomingStrokeStart = useCallback(
-    (payload: ScribbleStroke) => {
-      if (payload.userId !== session?.user?.id) {
-        setCanvasState((prev) => ({
-          ...prev,
-          strokes: [...prev.strokes, payload],
-        }));
-      }
-    },
-    [session?.user?.id]
-  );
-
-  const handleIncomingStrokeUpdate = useCallback(
-    (payload: { strokeId: string; points: Point[] }) => {
-      setCanvasState((prev) => ({
-        ...prev,
-        strokes: prev.strokes.map((stroke) =>
-          stroke.id == payload.strokeId
-            ? { ...stroke, points: payload.points }
-            : stroke
-        ),
-      }));
-    },
-    []
-  );
-
-  const handleIncomingStrokeEnd = useCallback(
-    (_payload: { strokeId: string }) => {
-      console.log("Stroke complete", _payload.strokeId);
-    },
-    []
-  );
-
   useEffect(() => {
-    boardAreaRef?.current?.addEventListener("mousemove", (e) => {
+    const handleMouseMove = (e: MouseEvent) => {
       if (isAuthenticated && channel && session?.user?.id) {
         const container = document.querySelector("#container");
         const containerOffset = container!.getBoundingClientRect();
@@ -201,343 +113,271 @@ export default function WhiteBoard(props: BoardProps) {
         const relativeX = e.clientX - containerOffset.left;
         const relativeY = e.clientY - containerOffset.top;
 
-        sendMousePosition(channel, session?.user?.id, relativeX, relativeY);
+        sendMousePosition(session.user.id, relativeX, relativeY);
       }
-    });
-  }, [isAuthenticated, channel, session?.user?.id]);
+    };
+
+    boardAreaRef?.current?.addEventListener("mousemove", handleMouseMove);
+
+    return () => {
+      boardAreaRef?.current?.removeEventListener("mousemove", handleMouseMove);
+    };
+  }, [isAuthenticated, channel, session?.user?.id, sendMousePosition]);
 
   useEffect(() => {
     if (channel) {
-      channel
-        .on("broadcast", { event: MOUSE_EVENT }, (payload) => {
-          receivedCursorPosition(payload.payload);
-        })
-        .on("broadcast", { event: STROKE_START_EVENT }, (payload) => {
-          handleIncomingStrokeStart(payload.payload);
-        })
-        .on("broadcast", { event: STROKE_UPDATE_EVENT }, (payload) => {
-          handleIncomingStrokeUpdate(payload.payload);
-        })
-        .on("broadcast", { event: STROKE_END_EVENT }, (payload) => {
-          handleIncomingStrokeEnd(payload.payload);
-        })
-        .on("broadcast", { event: "canvas_clear" }, () => {
-          setCanvasState({
-            strokes: [],
-            currStroke: null,
-            isScribbling: false,
-          });
-        })
-        .subscribe();
+      channel.on("broadcast", { event: "cursor" }, (payload) => {
+        receivedCursorPosition(payload.payload);
+      });
     }
-  }, [
-    channel,
-    handleIncomingStrokeStart,
-    handleIncomingStrokeEnd,
-    handleIncomingStrokeUpdate,
-    receivedCursorPosition,
-  ]);
+  }, [channel, receivedCursorPosition]);
 
   useEffect(() => {
-    if (isAuthenticated && room.id && session?.user?.id) {
-      const client = supabase;
-      const channel = client.channel(`room:${room.id}`, {
-        config: {
-          presence: {
-            key: session?.user?.id,
-          },
-        },
-      });
-      setChannel(channel);
-
-      channel.subscribe(async (status) => {
-        if (status === "SUBSCRIBED") {
-          await channel.track({});
-
-          channel.on("presence", { event: "sync" }, () => {
-            const presenceState = channel.presenceState();
-            onScribblersCountChange?.(Object.keys(presenceState));
-          });
+    if (room.id) {
+      loadRoomStrokes(room.id).then((res) => {
+        if (res.success) {
+          setCanvasState((prev) => ({
+            ...prev,
+            strokes: res.data,
+          }));
         }
       });
-
-      return () => {
-        channel.unsubscribe();
-      };
     }
-  }, [isAuthenticated, room.id, session?.user?.id, onScribblersCountChange]);
+  }, [room.id, setCanvasState]);
 
   useEffect(() => {
-    getUserSession().then((session) => {
-      if (session?.user?.id) {
-        setSession(session);
-        setIsAuthenticated(true);
-      } else {
-        setIsAuthenticated(false);
-      }
-    });
-  }, [session?.user?.id, session?.user?.user_metadata?.userColor]);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-  useEffect(
-    function () {
-      if (room.id) {
-        loadRoomStrokes(room.id).then((res) => {
-          if (res.success) {
-            setCanvasState((prev) => ({
-              ...prev,
-              strokes: res.data,
-            }));
-          }
-        });
-      }
-    },
-    [room.id]
-  );
+    const sketch = document.querySelector("#sketch")!;
+    const sketchStyle = getComputedStyle(sketch);
+    canvas.width = parseInt(sketchStyle.getPropertyValue("width"));
+    canvas.height = parseInt(sketchStyle.getPropertyValue("height"));
 
-  useEffect(
-    function () {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
 
-      const sketch = document.querySelector("#sketch")!;
-      const sketchStyle = getComputedStyle(sketch);
-      canvas.width = parseInt(sketchStyle.getPropertyValue("width"));
-      canvas.height = parseInt(sketchStyle.getPropertyValue("height"));
+    function renderAllStrokes() {
+      if (!ctx || !canvas) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawStrokes();
+    }
 
-      const ctx = canvas.getContext("2d");
+    function drawStrokes() {
       if (!ctx) return;
 
-      function renderAllStrokes() {
-        if (!ctx) return;
-        if (!canvas) return;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      canvasState.strokes.forEach((stroke) => {
+        if (stroke.points.length < 2) return;
 
-        drawStrokes();
-      }
+        ctx.beginPath();
+        ctx.strokeStyle = stroke.color;
+        ctx.lineWidth = stroke.size;
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
 
-      function drawStrokes() {
-        if (!ctx) return;
-        canvasState.strokes.forEach((stroke) => {
-          if (stroke.points.length < 2) return;
+        ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+        for (let i = 1; i < stroke.points.length; i++) {
+          ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+        }
+        ctx.stroke();
+      });
 
-          ctx.beginPath();
-          ctx.strokeStyle = stroke.color;
-          ctx.lineWidth = stroke.size;
-          ctx.lineJoin = "round";
-          ctx.lineCap = "round";
+      if (canvasState.currStroke && canvasState.currStroke.points.length > 1) {
+        const stroke = canvasState.currStroke;
+        ctx.beginPath();
+        ctx.strokeStyle = stroke.color;
+        ctx.lineWidth = stroke.size;
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
 
-          ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
-          for (let i = 1; i < stroke.points.length; i++) {
-            ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
-          }
-          ctx.stroke();
-        });
-
-        if (
-          canvasState.currStroke &&
-          canvasState.currStroke.points.length > 1
-        ) {
-          const stroke = canvasState.currStroke;
-          ctx.beginPath();
-          ctx.strokeStyle = stroke.color;
-          ctx.lineWidth = stroke.size;
-          ctx.lineJoin = "round";
-          ctx.lineCap = "round";
-
-          ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
-          for (let i = 1; i < stroke.points.length; i++) {
-            ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
-          }
+        ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+        for (let i = 1; i < stroke.points.length; i++) {
+          ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
         }
         ctx.stroke();
       }
+    }
 
-      function getCanvasOffset() {
-        const rect = canvas!.getBoundingClientRect();
-        return { left: rect.left, top: rect.top };
-      }
+    function getCanvasOffset() {
+      const rect = canvas!.getBoundingClientRect();
+      return { left: rect.left, top: rect.top };
+    }
 
-      function getPointFromEvent(e: MouseEvent | Touch) {
-        const canvasOffset = getCanvasOffset();
-        return {
-          x: e.clientX - canvasOffset.left,
-          y: e.clientY - canvasOffset.top,
-        };
-      }
-
-      function handleMouseDown(e: MouseEvent) {
-        if (hideTools || !session?.user?.id || !channel) return;
-
-        const point = getPointFromEvent(e);
-        const newStroke: ScribbleStroke = {
-          id: `${session.user.id}-${Date.now()}-${Math.random()}`,
-          userId: session.user.id,
-          points: [point],
-          color: scribblingPen.colour,
-          size: scribblingPen.size,
-          timestamp: new Date().toISOString(),
-        };
-
-        setCanvasState((prev) => ({
-          ...prev,
-          currStroke: newStroke,
-          isScribbling: true,
-        }));
-
-        broadcastStrokeStart(channel, newStroke);
-      }
-
-      function handleMouseMove(e: MouseEvent) {
-        if (!canvasState.isScribbling || !canvasState.currStroke || !channel)
-          return;
-
-        const point = getPointFromEvent(e);
-        const updatedPoints = [...canvasState.currStroke.points, point];
-
-        setCanvasState((prev) => ({
-          ...prev,
-          currStroke: prev.currStroke
-            ? {
-                ...prev.currStroke,
-                points: updatedPoints,
-              }
-            : null,
-        }));
-
-        broadcastStrokeUpdate(
-          channel,
-          canvasState.currStroke.id,
-          updatedPoints
-        );
-      }
-
-      function handleMouseUp() {
-        if (!canvasState.isScribbling || !canvasState.currStroke || !channel)
-          return;
-
-        const completedStroke = canvasState.currStroke;
-
-        setCanvasState((prev) => ({
-          ...prev,
-          strokes: [...prev.strokes, prev.currStroke!],
-          currStroke: null,
-          isScribbling: false,
-        }));
-
-        broadcastStrokeEnd(channel, canvasState.currStroke.id);
-
-        saveStroke({
-          stroke_id: completedStroke.id,
-          room_id: room.id,
-          user_id: completedStroke.userId,
-          points: completedStroke.points,
-          color: completedStroke.color,
-          size: completedStroke.size,
-        }).then((res) => {
-          console.log("Save stroke res: ", res);
-        });
-      }
-
-      function handleTouchStart(e: TouchEvent) {
-        e.preventDefault();
-        if (hideTools || !session?.user?.id || !channel) return;
-
-        const point = getPointFromEvent(e.touches[0]);
-        const newStroke: ScribbleStroke = {
-          id: `${session.user.id}-${Date.now()}-${Math.random()}`,
-          userId: session.user.id,
-          points: [point],
-          color: scribblingPen.colour,
-          size: scribblingPen.size,
-          timestamp: new Date().toISOString(),
-        };
-
-        setCanvasState((prev) => ({
-          ...prev,
-          currStroke: newStroke,
-          isScribbling: true,
-        }));
-
-        broadcastStrokeStart(channel, newStroke);
-      }
-
-      function handleTouchMove(e: TouchEvent) {
-        e.preventDefault();
-        if (!canvasState.isScribbling || !canvasState.currStroke || !channel)
-          return;
-
-        const point = getPointFromEvent(e.touches[0]);
-        const updatedPoints = [...canvasState.currStroke.points, point];
-
-        setCanvasState((prev) => ({
-          ...prev,
-          currStroke: prev.currStroke
-            ? {
-                ...prev.currStroke,
-                points: updatedPoints,
-              }
-            : null,
-        }));
-
-        broadcastStrokeUpdate(
-          channel,
-          canvasState.currStroke.id,
-          updatedPoints
-        );
-      }
-
-      function handleTouchEnd() {
-        if (!canvasState.isScribbling || !canvasState.currStroke || !channel)
-          return;
-
-        const completedStroke = canvasState.currStroke;
-
-        setCanvasState((prev) => ({
-          ...prev,
-          strokes: [...prev.strokes, prev.currStroke!],
-          currStroke: null,
-          isScribbling: false,
-        }));
-
-        broadcastStrokeEnd(channel, canvasState.currStroke.id);
-
-        saveStroke({
-          stroke_id: completedStroke.id,
-          room_id: room.id,
-          user_id: completedStroke.userId,
-          points: completedStroke.points,
-          color: completedStroke.color,
-          size: completedStroke.size,
-        });
-      }
-
-      canvas.addEventListener("mousedown", handleMouseDown);
-      canvas.addEventListener("mouseup", handleMouseUp);
-      canvas.addEventListener("mousemove", handleMouseMove);
-      canvas.addEventListener("touchstart", handleTouchStart);
-      canvas.addEventListener("touchend", handleTouchEnd);
-      canvas.addEventListener("touchmove", handleTouchMove);
-
-      renderAllStrokes();
-
-      return () => {
-        canvas.removeEventListener("mousedown", handleMouseDown);
-        canvas.removeEventListener("mouseup", handleMouseUp);
-        canvas.removeEventListener("mousemove", handleMouseMove);
-        canvas.removeEventListener("touchstart", handleTouchStart);
-        canvas.removeEventListener("touchend", handleTouchEnd);
-        canvas.removeEventListener("touchmove", handleTouchMove);
+    function getPointFromEvent(e: MouseEvent | Touch) {
+      const canvasOffset = getCanvasOffset();
+      return {
+        x: e.clientX - canvasOffset.left,
+        y: e.clientY - canvasOffset.top,
       };
-    },
-    [
-      room?.id,
-      canvasState,
-      scribblingPen,
-      session?.user?.id,
-      channel,
-      hideTools,
-    ]
-  );
+    }
+
+    function handleMouseDown(e: MouseEvent) {
+      if (hideTools || !session?.user?.id || !channel) return;
+
+      const point = getPointFromEvent(e);
+      const newStroke: ScribbleStroke = {
+        id: `${session.user.id}-${Date.now()}-${Math.random()}`,
+        userId: session.user.id,
+        points: [point],
+        color: scribblingPen.colour,
+        size: scribblingPen.size,
+        timestamp: new Date().toISOString(),
+      };
+
+      setCanvasState((prev) => ({
+        ...prev,
+        currStroke: newStroke,
+        isScribbling: true,
+      }));
+
+      broadcastStrokeStart(newStroke);
+    }
+
+    function handleMouseMove(e: MouseEvent) {
+      if (!canvasState.isScribbling || !canvasState.currStroke || !channel)
+        return;
+
+      const point = getPointFromEvent(e);
+      const updatedPoints = [...canvasState.currStroke.points, point];
+
+      setCanvasState((prev) => ({
+        ...prev,
+        currStroke: prev.currStroke
+          ? {
+              ...prev.currStroke,
+              points: updatedPoints,
+            }
+          : null,
+      }));
+
+      broadcastStrokeUpdate(canvasState.currStroke.id, updatedPoints);
+    }
+
+    function handleMouseUp() {
+      if (!canvasState.isScribbling || !canvasState.currStroke || !channel)
+        return;
+
+      const completedStroke = canvasState.currStroke;
+
+      setCanvasState((prev) => ({
+        ...prev,
+        strokes: [...prev.strokes, prev.currStroke!],
+        currStroke: null,
+        isScribbling: false,
+      }));
+
+      broadcastStrokeEnd(canvasState.currStroke.id);
+
+      saveStroke({
+        stroke_id: completedStroke.id,
+        room_id: room.id,
+        user_id: completedStroke.userId,
+        points: completedStroke.points,
+        color: completedStroke.color,
+        size: completedStroke.size,
+      }).then((res) => {
+        console.log("Save stroke res: ", res);
+      });
+    }
+
+    function handleTouchStart(e: TouchEvent) {
+      e.preventDefault();
+      if (hideTools || !session?.user?.id || !channel) return;
+
+      const point = getPointFromEvent(e.touches[0]);
+      const newStroke: ScribbleStroke = {
+        id: `${session.user.id}-${Date.now()}-${Math.random()}`,
+        userId: session.user.id,
+        points: [point],
+        color: scribblingPen.colour,
+        size: scribblingPen.size,
+        timestamp: new Date().toISOString(),
+      };
+
+      setCanvasState((prev) => ({
+        ...prev,
+        currStroke: newStroke,
+        isScribbling: true,
+      }));
+
+      broadcastStrokeStart(newStroke);
+    }
+
+    function handleTouchMove(e: TouchEvent) {
+      e.preventDefault();
+      if (!canvasState.isScribbling || !canvasState.currStroke || !channel)
+        return;
+
+      const point = getPointFromEvent(e.touches[0]);
+      const updatedPoints = [...canvasState.currStroke.points, point];
+
+      setCanvasState((prev) => ({
+        ...prev,
+        currStroke: prev.currStroke
+          ? {
+              ...prev.currStroke,
+              points: updatedPoints,
+            }
+          : null,
+      }));
+
+      broadcastStrokeUpdate(canvasState.currStroke.id, updatedPoints);
+    }
+
+    function handleTouchEnd() {
+      if (!canvasState.isScribbling || !canvasState.currStroke || !channel)
+        return;
+
+      const completedStroke = canvasState.currStroke;
+
+      setCanvasState((prev) => ({
+        ...prev,
+        strokes: [...prev.strokes, prev.currStroke!],
+        currStroke: null,
+        isScribbling: false,
+      }));
+
+      broadcastStrokeEnd(canvasState.currStroke.id);
+
+      saveStroke({
+        stroke_id: completedStroke.id,
+        room_id: room.id,
+        user_id: completedStroke.userId,
+        points: completedStroke.points,
+        color: completedStroke.color,
+        size: completedStroke.size,
+      });
+    }
+
+    canvas.addEventListener("mousedown", handleMouseDown);
+    canvas.addEventListener("mouseup", handleMouseUp);
+    canvas.addEventListener("mousemove", handleMouseMove);
+    canvas.addEventListener("touchstart", handleTouchStart);
+    canvas.addEventListener("touchend", handleTouchEnd);
+    canvas.addEventListener("touchmove", handleTouchMove);
+
+    renderAllStrokes();
+
+    return () => {
+      canvas.removeEventListener("mousedown", handleMouseDown);
+      canvas.removeEventListener("mouseup", handleMouseUp);
+      canvas.removeEventListener("mousemove", handleMouseMove);
+      canvas.removeEventListener("touchstart", handleTouchStart);
+      canvas.removeEventListener("touchend", handleTouchEnd);
+      canvas.removeEventListener("touchmove", handleTouchMove);
+    };
+  }, [
+    room?.id,
+    canvasState,
+    scribblingPen,
+    session?.user?.id,
+    channel,
+    hideTools,
+    setCanvasState,
+    broadcastStrokeStart,
+    broadcastStrokeUpdate,
+    broadcastStrokeEnd,
+  ]);
 
   function handleWheel(e: React.WheelEvent<HTMLDivElement>) {
     e.preventDefault();
@@ -553,7 +393,7 @@ export default function WhiteBoard(props: BoardProps) {
   return (
     <div
       className={clsx(
-        "my-auto w-full h-full p-2 ",
+        "my-auto w-full h-full p-2",
         isEraserActive
           ? "cursor-[url('/cursors/eraser.cur'),_pointer]"
           : "cursor-[url('/cursors/pen.cur'),_pointer]"
