@@ -126,8 +126,8 @@ export default function ScribbleMenu(props: ScribbleMenuProps) {
   };
 
   return (
-    <div className="fixed bottom-4 left-0 right-0 px-4 z-20 flex flex-row justify-between items-center gap-2">
-      <div className="flex flex-row items-center gap-2">
+    <div className="fixed bottom-4 left-0 right-0 px-4 z-20 flex flex-row justify-between items-center gap-2 pointer-events-none">
+      <div className="flex flex-row items-center gap-2 pointer-events-auto">
         <div className="relative">
           <button
             onMouseEnter={() => setShowPalette(true)}
@@ -223,7 +223,7 @@ export default function ScribbleMenu(props: ScribbleMenuProps) {
 
       {isRoomOwner && (
         <button
-          className="h-10 w-10 rounded-full bg-red-500 shadow-md flex items-center justify-center hover:bg-red-700 transition"
+          className="h-10 w-10 rounded-full bg-red-500 shadow-md flex items-center justify-center hover:bg-red-700 transition pointer-events-auto"
           onClick={handleClearCanvas}
         >
           <Trash className="w-5 h-5 text-white" />
