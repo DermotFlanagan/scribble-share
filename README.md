@@ -1,6 +1,7 @@
 # 🖋️ ScribbleShare
 
-A real-time collaborative drawing application built using Next.js and Supabase.
+A real-time collaborative drawing application built using Next.js and Supabase.<br/>
+View the site at: https://scribble-share.vercel.app/
 
 ## Features
 
